@@ -128,7 +128,7 @@ type ContributionList []ContributionDay
 func (l ContributionList) PrettyPrint() error {
 	tw := table.NewWriter()
 	tw.SetOutputMirror(os.Stdout)
-	tw.AppendHeader(table.Row{"Date", "ContribCnt", "Level"})
+	tw.AppendHeader(table.Row{"date", "count", "level"})
 	tw.AppendRows(lo.Reverse(lo.Map(l, func(item ContributionDay, _ int) table.Row {
 		return table.Row{item.Date, item.ContributionCount, item.ContributionLevel}
 	})))
