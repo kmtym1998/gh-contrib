@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/cli/go-gh/v2/pkg/api"
 	"github.com/fatih/color"
+	"github.com/jedib0t/go-pretty/table"
 	"github.com/samber/lo"
 )
 
@@ -40,7 +42,7 @@ func main() {
 		ContributionCalendar.
 		TotalContributions
 
-	var contribItems []ContributionDay
+	var contribItems ContributionList
 	for _, week := range getContribResp.User.ContributionsCollection.ContributionCalendar.Weeks {
 		for _, day := range week.ContributionDays {
 			contribItems = append(contribItems, day)
@@ -48,9 +50,7 @@ func main() {
 	}
 
 	fmt.Printf("total contributions from %s to %s: %d\n", from.Format("2006-01-02"), to.Format("2006-01-02"), total)
-	for _, item := range lo.Reverse(contribItems) {
-		color.Green("  %s: %d\n", item.Date, item.ContributionCount)
-	}
+	contribItems.PrettyPrint()
 }
 
 type GetContribResp struct {
@@ -66,9 +66,19 @@ type GetContribResp struct {
 	} `json:"user"`
 }
 type ContributionDay struct {
-	ContributionCount int    `json:"contributionCount"`
-	Date              string `json:"date"`
+	ContributionCount int                  `json:"contributionCount"`
+	ContributionLevel ContributionQuartile `json:"contributionLevel"`
+	Date              string               `json:"date"`
 }
+
+type ContributionQuartile string
+
+const (
+	ContributionLevel1 ContributionQuartile = "FIRST_QUARTILE"
+	ContributionLevel2 ContributionQuartile = "SECOND_QUARTILE"
+	ContributionLevel3 ContributionQuartile = "THIRD_QUARTILE"
+	ContributionLevel4 ContributionQuartile = "FOURTH_QUARTILE"
+)
 
 // getContributions returns the contributions for a user
 func getContributions(userName string, from, to *time.Time) (*GetContribResp, error) {
@@ -111,4 +121,19 @@ query($userName:String!, $from: DateTime, $to: DateTime) {
 	}
 
 	return &response, nil
+}
+
+type ContributionList []ContributionDay
+
+func (l ContributionList) PrettyPrint() error {
+	tw := table.NewWriter()
+	tw.SetOutputMirror(os.Stdout)
+	tw.AppendHeader(table.Row{"Date", "ContribCnt", "Level"})
+	tw.AppendRows(lo.Map(l, func(item ContributionDay, _ int) table.Row {
+		return table.Row{item.Date, item.ContributionCount, item.ContributionLevel}
+	}))
+	tw.SetStyle(table.StyleColoredBlackOnGreenWhite)
+	tw.Render()
+
+	return nil
 }
