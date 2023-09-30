@@ -2,25 +2,113 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/cli/go-gh/v2/pkg/api"
+	"github.com/fatih/color"
+	"github.com/samber/lo"
 )
 
 func main() {
-	fmt.Println("hi world, this is the gh-contrib extension!")
+	defer func() {
+		if r := recover(); r != nil {
+			color.Red(fmt.Sprint(r))
+		}
+	}()
+
 	client, err := api.DefaultRESTClient()
 	if err != nil {
-		fmt.Println(err)
-		return
+		panic(err)
 	}
-	response := struct {Login string}{}
-	err = client.Get("user", &response)
+
+	response := struct{ Login string }{}
+	if err := client.Get("user", &response); err != nil {
+		panic("error from github api: " + err.Error())
+	}
+
+	to := time.Now()
+	from := to.AddDate(0, 0, -5)
+
+	getContribResp, err := getContributions(response.Login, &from, &to)
 	if err != nil {
-		fmt.Println(err)
-		return
+		panic("error from github api: " + err.Error())
 	}
-	fmt.Printf("running as %s\n", response.Login)
+
+	total := getContribResp.
+		User.
+		ContributionsCollection.
+		ContributionCalendar.
+		TotalContributions
+
+	var contribItems []ContributionDay
+	for _, week := range getContribResp.User.ContributionsCollection.ContributionCalendar.Weeks {
+		for _, day := range week.ContributionDays {
+			contribItems = append(contribItems, day)
+		}
+	}
+
+	fmt.Printf("total contributions from %s to %s: %d\n", from.Format("2006-01-02"), to.Format("2006-01-02"), total)
+	for _, item := range lo.Reverse(contribItems) {
+		color.Green("  %s: %d\n", item.Date, item.ContributionCount)
+	}
 }
 
-// For more examples of using go-gh, see:
-// https://github.com/cli/go-gh/blob/trunk/example_gh_test.go
+type GetContribResp struct {
+	User struct {
+		ContributionsCollection struct {
+			ContributionCalendar struct {
+				TotalContributions int `json:"totalContributions"`
+				Weeks              []struct {
+					ContributionDays []ContributionDay `json:"contributionDays"`
+				} `json:"weeks"`
+			} `json:"contributionCalendar"`
+		} `json:"contributionsCollection"`
+	} `json:"user"`
+}
+type ContributionDay struct {
+	ContributionCount int    `json:"contributionCount"`
+	Date              string `json:"date"`
+}
+
+// getContributions returns the contributions for a user
+func getContributions(userName string, from, to *time.Time) (*GetContribResp, error) {
+	const query = `
+query($userName:String!, $from: DateTime, $to: DateTime) {
+  user(login: $userName){
+    contributionsCollection(from: $from, to: $to) {
+      contributionCalendar {
+        totalContributions
+        weeks {
+          contributionDays {
+            contributionCount
+						contributionLevel
+            date
+          }
+        }
+      }
+    }
+  }
+}`
+
+	variables := map[string]any{
+		"userName": userName,
+	}
+	if !lo.FromPtr(from).IsZero() {
+		variables["from"] = from.Format(time.RFC3339)
+	}
+	if !lo.FromPtr(to).IsZero() {
+		variables["to"] = to.Format(time.RFC3339)
+	}
+
+	client, err := api.DefaultGraphQLClient()
+	if err != nil {
+		return nil, err
+	}
+
+	var response GetContribResp
+	if err := client.Do(query, variables, &response); err != nil {
+		return nil, err
+	}
+
+	return &response, nil
+}
