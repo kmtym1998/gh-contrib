@@ -129,9 +129,9 @@ func (l ContributionList) PrettyPrint() error {
 	tw := table.NewWriter()
 	tw.SetOutputMirror(os.Stdout)
 	tw.AppendHeader(table.Row{"Date", "ContribCnt", "Level"})
-	tw.AppendRows(lo.Map(l, func(item ContributionDay, _ int) table.Row {
+	tw.AppendRows(lo.Reverse(lo.Map(l, func(item ContributionDay, _ int) table.Row {
 		return table.Row{item.Date, item.ContributionCount, item.ContributionLevel}
-	}))
+	})))
 	tw.SetStyle(table.StyleColoredBlackOnGreenWhite)
 	tw.Render()
 
