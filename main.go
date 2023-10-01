@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"time"
@@ -28,29 +29,31 @@ func main() {
 		panic("error from github api: " + err.Error())
 	}
 
-	to := time.Now()
-	from := to.AddDate(0, 0, -5)
+	now := time.Now()
+	fromS := flag.String("from", now.AddDate(0, 0, -5).Format("2006-01-02"), "from date (YYYY-MM-DD) defaults to 5 days ago")
+	toS := flag.String("to", now.Format("2006-01-02"), "to date (YYYY-MM-DD) defaults to today")
+	flag.Parse()
+
+	from, err := time.Parse("2006-01-02", lo.FromPtr(fromS))
+	if err != nil {
+		panic("invalid 'from' date format")
+	}
+
+	to, err := time.Parse("2006-01-02", lo.FromPtr(toS))
+	if err != nil {
+		panic("invalid 'to' date format")
+	}
+
+	if from.After(to) {
+		panic("'from' date must be before 'to' date")
+	}
 
 	getContribResp, err := getContributions(response.Login, &from, &to)
 	if err != nil {
 		panic("error from github api: " + err.Error())
 	}
 
-	total := getContribResp.
-		User.
-		ContributionsCollection.
-		ContributionCalendar.
-		TotalContributions
-
-	var contribItems ContributionList
-	for _, week := range getContribResp.User.ContributionsCollection.ContributionCalendar.Weeks {
-		for _, day := range week.ContributionDays {
-			contribItems = append(contribItems, day)
-		}
-	}
-
-	fmt.Printf("total contributions from %s to %s: %d\n", from.Format("2006-01-02"), to.Format("2006-01-02"), total)
-	contribItems.PrettyPrint()
+	getContribResp.PrettyPrint()
 }
 
 type GetContribResp struct {
@@ -123,15 +126,27 @@ query($userName:String!, $from: DateTime, $to: DateTime) {
 	return &response, nil
 }
 
-type ContributionList []ContributionDay
+func (r GetContribResp) PrettyPrint() error {
+	total := r.
+		User.
+		ContributionsCollection.
+		ContributionCalendar.
+		TotalContributions
 
-func (l ContributionList) PrettyPrint() error {
+	var contribItems []ContributionDay
+	for _, week := range r.User.ContributionsCollection.ContributionCalendar.Weeks {
+		for _, day := range week.ContributionDays {
+			contribItems = append(contribItems, day)
+		}
+	}
+
 	tw := table.NewWriter()
 	tw.SetOutputMirror(os.Stdout)
-	tw.AppendHeader(table.Row{"date", "count", "level"})
-	tw.AppendRows(lo.Reverse(lo.Map(l, func(item ContributionDay, _ int) table.Row {
-		return table.Row{item.Date, item.ContributionCount, item.ContributionLevel}
+	tw.AppendHeader(table.Row{"date", "level", "count"})
+	tw.AppendRows(lo.Reverse(lo.Map(contribItems, func(item ContributionDay, _ int) table.Row {
+		return table.Row{item.Date, item.ContributionLevel, item.ContributionCount}
 	})))
+	tw.AppendFooter(table.Row{"", "total", total})
 	tw.SetStyle(table.StyleColoredBlackOnGreenWhite)
 	tw.Render()
 
