@@ -6,6 +6,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/cli/cli/v2/pkg/cmd/factory"
+	"github.com/cli/cli/v2/pkg/extensions"
 	"github.com/cli/go-gh/v2/pkg/api"
 	"github.com/fatih/color"
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -53,7 +55,8 @@ func main() {
 		panic("error from github api: " + err.Error())
 	}
 
-	getContribResp.PrettyPrint()
+	getContribResp.prettyPrint()
+	checkVersion()
 }
 
 type GetContribResp struct {
@@ -126,7 +129,7 @@ query($userName:String!, $from: DateTime, $to: DateTime) {
 	return &response, nil
 }
 
-func (r GetContribResp) PrettyPrint() error {
+func (r GetContribResp) prettyPrint() error {
 	total := r.
 		User.
 		ContributionsCollection.
@@ -151,4 +154,22 @@ func (r GetContribResp) PrettyPrint() error {
 	tw.Render()
 
 	return nil
+}
+
+func checkVersion() {
+	f := factory.New("")
+	extMgr := f.ExtensionManager
+	exts := extMgr.List()
+
+	if contribExt, found := lo.Find(exts, func(ext extensions.Extension) bool {
+		return ext.Name() == "contrib"
+	}); found {
+		current := contribExt.CurrentVersion()
+		latest := contribExt.LatestVersion()
+
+		if current != latest {
+			color.White(fmt.Sprintf("your contrib extension is out of date: %s -> %s", current, latest))
+			color.White("run `gh extension upgrade contrib` to update")
+		}
+	}
 }
