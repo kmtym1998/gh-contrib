@@ -7,7 +7,7 @@ import (
 
 	"github.com/cli/go-gh/v2/pkg/api"
 	"github.com/fatih/color"
-	"github.com/jedib0t/go-pretty/table"
+	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/samber/lo"
 )
 
